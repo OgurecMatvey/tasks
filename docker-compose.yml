@@ -1,0 +1,39 @@
+x-app: &app
+  build: .
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://tasks:tasks@db:5432/tasks
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: tasks
+      POSTGRES_PASSWORD: tasks
+      POSTGRES_DB: tasks
+    # порт виден только с этого компьютера: нужен тестам (pytest ходит в localhost:5434)
+    ports: ["127.0.0.1:5434:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tasks"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    <<: *app
+    restart: "no"
+    command: alembic upgrade head
+    depends_on:
+      db: {condition: service_healthy}
+
+  api:
+    <<: *app
+    ports: ["8002:8000"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+
+volumes:
+  pgdata:
